@@ -2,6 +2,9 @@
 
 . ./ci/build-common.sh
 
+# 强制使用静态库进行链接
+export PKG_CONFIG="pkg-config --static"
+
 args=(
   -D{amf,cdda,d3d-hwaccel,d3d11,dvdnav,jpeg,lcms2,libarchive}=enabled
   -D{libbluray,lua,shaderc,spirv-cross,uchardet,vapoursynth}=enabled
