@@ -28,6 +28,7 @@ on:
       - 'Copyright'
       - 'README.md'
       - 'RELEASE_NOTES'
+  workflow_dispatch:   # <--- 新增手动触发
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -251,6 +252,7 @@ jobs:
             build/mpv.???
             build/mpv-*.bat
             build/vulkan-*.dll
+            build/mpv-*.dll      # <--- 新增，包含 libmpv-2.dll（实际为 mpv-2.dll）
             !build/mpv.lib
             !build/mpv.pdb
 
