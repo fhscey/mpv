@@ -28,7 +28,7 @@ on:
       - 'Copyright'
       - 'README.md'
       - 'RELEASE_NOTES'
-  workflow_dispatch:   # <--- 新增手动触发
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -252,7 +252,7 @@ jobs:
             build/mpv.???
             build/mpv-*.bat
             build/vulkan-*.dll
-            build/mpv-*.dll      # <--- 新增，包含 libmpv-2.dll（实际为 mpv-2.dll）
+            build/mpv-*.dll
             !build/mpv.lib
             !build/mpv.pdb
 
@@ -431,9 +431,6 @@ jobs:
   linux-ffmpeg-6-1:
     runs-on: ubuntu-latest
     container:
-      # We want to test ffmpeg 6.1.2, which Alpine 3.21 includes.
-      # Also test compatibility with Wayland Protocols 1.38 and Wayland libs 1.23.
-      # Musl support is an added bonus.
       image: alpine:3.21
     steps:
       - uses: actions/checkout@v7
@@ -485,8 +482,8 @@ jobs:
           cat ./build/meson-logs/testlog.txt
 
   openbsd:
-    runs-on: ubuntu-latest # until https://github.com/actions/runner/issues/385
-    timeout-minutes: 15 # avoid any weirdness with the VM
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
     - uses: actions/checkout@v7
     - name: Test in OpenBSD VM
@@ -532,8 +529,8 @@ jobs:
             fi
 
   freebsd:
-    runs-on: ubuntu-latest # until https://github.com/actions/runner/issues/385
-    timeout-minutes: 15 # avoid any weirdness with the VM
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
     - uses: actions/checkout@v7
     - name: Test in FreeBSD VM
@@ -680,6 +677,27 @@ jobs:
         run: |
           cat ./build/meson-logs/testlog.txt
 
+      # ==================== 新增：上传构件 ====================
+      - name: Artifact name
+        id: artifact
+        run: |
+          VERSION_FILE=$(find . -path "*/common/version.h" -type f | head -n 1)
+          VER=$(grep VERSION "$VERSION_FILE" | cut -d'"' -f2)
+          PR=${{ github.event.pull_request.number && format('-pr{0}', github.event.pull_request.number) || '' }}
+          SYS_SUFFIX="${{ matrix.sys }}"
+          if [ "${{ matrix.asan }}" = "true" ]; then SYS_SUFFIX="${SYS_SUFFIX}-asan"; fi
+          if [ -n "${{ matrix.auto-var-init }}" ]; then SYS_SUFFIX="${SYS_SUFFIX}-${{ matrix.auto-var-init }}"; fi
+          echo "name=mpv-$VER$PR-${{ github.run_id }}-$SYS_SUFFIX" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: |
+            build/mpv.exe
+            build/mpv-*.dll
+            build/libmpv-*.dll
+
   publish:
     name: Publish git release
     needs: [mingw, win32, macos]
@@ -708,8 +726,6 @@ jobs:
 
           artifacts=$(gh api "repos/{owner}/{repo}/actions/runs/${{ github.run_id }}/artifacts")
 
-          # Attach every build artifact unchanged; the notes link to them with
-          # labels derived from the verbose names.
           mkdir -p release
           jq -r '.artifacts[] | "\(.id)\t\(.name)"' <<< "$artifacts" |
           while IFS=$'\t' read -r id name; do
@@ -728,7 +744,6 @@ jobs:
                     (if test("macos") then "macOS " + capture("macos-(?<v>[0-9]+)").v else empty end),
                     (if test("-pdb") then "debug symbols" else empty end) ] as $q
                 | $arch + (if ($q | length) > 0 then " (" + ($q | join(", ")) + ")" else "" end);
-              # primary builds first (x86_64, arm64, i686; Clang before GCC), debug symbols last
               def rank:
                 [ (if test("-pdb") then 1 else 0 end),
                   (if test("x86_64|intel") then 0 elif test("i686") then 2 else 1 end),
@@ -739,7 +754,6 @@ jobs:
             ' <<< "$artifacts"
           }
 
-          # Match the version string baked into the build (see common/meson.build).
           version=$(git describe --abbrev=9 --tags --dirty --match "v0.*")
           notes=$(cat <<EOF
           Automated development build of the latest \`master\` branch.
@@ -763,9 +777,6 @@ jobs:
           EOF
           )
 
-          # Create the release once (which also creates the tag), then only edit
-          # it in place so watchers aren't notified on every master push. Stale
-          # assets are dropped first since their names embed the run id.
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release view "$tag" --json assets --jq '.assets[].name' |
             while read -r asset; do
