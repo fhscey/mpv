@@ -629,6 +629,7 @@ jobs:
             cc:p
             cppwinrt:p
             curl:p
+            dlfcn:p
             ffmpeg:p
             lcms2:p
             libarchive:p
