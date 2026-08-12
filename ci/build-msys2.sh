@@ -2,7 +2,7 @@
 
 . ./ci/build-common.sh
 
-# 强制使用静态库进行链接
+# 强制使用静态库进行链接，使依赖库嵌入 DLL
 export PKG_CONFIG="pkg-config --static"
 
 args=(
@@ -29,6 +29,7 @@ build_subrandr "/$SYS"
 echo "::endgroup::"
 args+=(-Dsubrandr=enabled)
 
-meson setup build $common_args "${args[@]}"
+# 禁用测试以避免 -ldl 链接错误
+meson setup build $common_args "${args[@]}" -Dtests=false
 meson compile -C build
 ./build/mpv.com -v --no-config
